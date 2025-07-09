@@ -330,7 +330,7 @@ class TDFRouteExtractor {
 
     try {
       // Get all stages (no stage filter)
-      const params = { ...this.defaultParams };
+      const params = { ...this.defaultParams, where: '1=1' };
       const url = this.buildUrl(params);
 
       const geoJsonData = await this.fetchGeoJSON(url);
