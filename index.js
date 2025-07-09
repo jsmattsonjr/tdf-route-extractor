@@ -302,7 +302,8 @@ class TDFRouteExtractor {
 
   generateFilename(stageName, stageNumber, outputPath) {
     const safeName = stageName.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_');
-    const filename = `TDF2025_Stage${stageNumber}_${safeName}.gpx`;
+    const paddedStageNumber = String(stageNumber).padStart(2, '0');
+    const filename = `TDF2025_Stage${paddedStageNumber}_${safeName}.gpx`;
 
     if (outputPath) {
       return path.join(outputPath, filename);
