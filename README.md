@@ -11,40 +11,33 @@ Extract **official Tour de France route data** and convert it to GPX format for 
 - ✅ **All stages** - Extract individual stages or all 21 stages at once
 - ✅ **CLI tool** - Simple command-line interface with npx
 
-## Quick Start
-
-```bash
-# Extract Stage 6 (Bayeux > Vire)
-npx tdf-route-extractor 6
-
-# Extract Stage 4 (Amiens > Rouen) 
-npx tdf-route-extractor 4
-
-# Extract all stages
-npx tdf-route-extractor --all
-
-# Extract to specific directory
-npx tdf-route-extractor 6 --output ./my-routes/
-```
-
 ## Installation
 
-### Using npx (Recommended)
-No installation required! Just run directly:
-
+### Clone and Run Locally
 ```bash
-npx tdf-route-extractor <stage-number>
+git clone https://github.com/jmattson/tdf-route-extractor.git
+cd tdf-route-extractor
+npm install
 ```
 
-### Global Installation
+### Run the Tool
 ```bash
-npm install -g tdf-route-extractor
-tdf-route-extractor 6
+# Extract Stage 6 (Bayeux > Vire)
+node index.js 6
+
+# Extract Stage 4 (Amiens > Rouen) 
+node index.js 4
+
+# Extract all stages
+node index.js --all
+
+# Extract to specific directory
+node index.js 6 --output ./my-routes/
 ```
 
-### Local Installation
+### After Publishing to npm
+Once published, you can use npx:
 ```bash
-npm install tdf-route-extractor
 npx tdf-route-extractor 6
 ```
 
@@ -53,7 +46,7 @@ npx tdf-route-extractor 6
 ### Extract Single Stage
 ```bash
 # Extract Stage 6
-npx tdf-route-extractor 6
+node index.js 6
 
 # Output:
 # 🚴‍♂️ Extracting Tour de France 2025 Stage 6...
@@ -61,18 +54,18 @@ npx tdf-route-extractor 6
 # ✅ Found 1 route feature(s)
 # 📍 Processing: BAYEUX > VIRE NORMANDIE
 # 🔄 Converted 118 coordinates to GPS format
-# 💾 Saved: TDF2025_Stage6_BAYEUX_VIRE_NORMANDIE.gpx
+# 💾 Saved: TDF2025_Stage06_BAYEUX_VIRE_NORMANDIE.gpx
 # 🎉 Extraction complete!
 ```
 
 ### Extract All Stages
 ```bash
-npx tdf-route-extractor --all --output ./tdf2025-routes/
+node index.js --all --output ./tdf2025-routes/
 ```
 
 ### List Available Stages
 ```bash
-npx tdf-route-extractor --list
+node index.js --list
 
 # Output:
 # 🚴‍♂️ Tour de France 2025 Stages:
@@ -87,11 +80,11 @@ npx tdf-route-extractor --list
 
 | Option | Description | Example |
 |--------|-------------|---------|
-| `<stage-number>` | Extract specific stage (1-21) | `npx tdf-route-extractor 6` |
-| `--all` | Extract all 21 stages | `npx tdf-route-extractor --all` |
-| `--list` | List all available stages | `npx tdf-route-extractor --list` |
-| `--output, -o` | Output directory | `npx tdf-route-extractor 6 -o ./routes/` |
-| `--help, -h` | Show help message | `npx tdf-route-extractor --help` |
+| `<stage-number>` | Extract specific stage (1-21) | `node index.js 6` |
+| `--all` | Extract all 21 stages | `node index.js --all` |
+| `--list` | List all available stages | `node index.js --list` |
+| `--output, -o` | Output directory | `node index.js 6 -o ./routes/` |
+| `--help, -h` | Show help message | `node index.js --help` |
 
 ## Output Format
 
@@ -129,8 +122,8 @@ TDF2025_Stage<NUMBER>_<STAGE_NAME>.gpx
 ```
 
 Examples:
-- `TDF2025_Stage6_BAYEUX_VIRE_NORMANDIE.gpx`
-- `TDF2025_Stage4_AMIENS_ROUEN.gpx`
+- `TDF2025_Stage06_BAYEUX_VIRE_NORMANDIE.gpx`
+- `TDF2025_Stage04_AMIENS_ROUEN.gpx`
 
 ## Using the GPX Files
 
