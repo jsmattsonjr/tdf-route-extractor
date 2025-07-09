@@ -14,7 +14,7 @@ async function runTests() {
   try {
     // Test 1: List all stages
     console.log('📋 Test 1: Listing all available stages...');
-    const params = { ...extractor.defaultParams, returnGeometry: 'false' };
+    const params = { ...extractor.defaultParams, returnGeometry: 'false', where: '1=1' };
     const url = extractor.buildUrl(params);
     const data = await extractor.fetchGeoJSON(url);
     
