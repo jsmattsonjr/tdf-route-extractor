@@ -1,0 +1,43 @@
+{
+  "name": "tdf-route-extractor",
+  "version": "1.0.0",
+  "description": "Extract official Tour de France route data and convert to GPX format",
+  "main": "index.js",
+  "bin": {
+    "tdf-route-extractor": "./index.js"
+  },
+  "scripts": {
+    "test": "node test.js",
+    "start": "node index.js"
+  },
+  "keywords": [
+    "tour-de-france",
+    "tdf",
+    "cycling",
+    "gpx",
+    "route",
+    "gps",
+    "navigation",
+    "arcgis",
+    "geojson"
+  ],
+  "author": "Tour de France Route Extractor",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/username/tdf-route-extractor.git"
+  },
+  "homepage": "https://github.com/username/tdf-route-extractor#readme",
+  "bugs": {
+    "url": "https://github.com/username/tdf-route-extractor/issues"
+  },
+  "engines": {
+    "node": ">=12.0.0"
+  },
+  "preferGlobal": true,
+  "files": [
+    "index.js",
+    "README.md",
+    "LICENSE"
+  ]
+}
