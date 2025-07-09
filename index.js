@@ -32,109 +32,72 @@ class TDFRouteExtractor {
 
   async extractStage(stageNumber, options = {}) {
     console.log(`🚴‍♂️ Extracting Tour de France 2025 Stage ${stageNumber}...`);
-    
-    // Try different parameter combinations using the working URL pattern
-    const strategies = [
-      // Strategy 1: Full parameters with France bounding box and stage filter
-      {
-        ...this.defaultParams,
-        where: stageNumber ? `Etape=${stageNumber}` : '1=1',
-        geometry: JSON.stringify({
-          "xmin": -560000,
-          "ymin": 5100000,
-          "xmax": 1050000,
-          "ymax": 6700000,
-          "spatialReference": {"wkid": 102100}
-        }),
-        quantizationParameters: JSON.stringify({
-          "mode": "view",
-          "originPosition": "upperLeft",
-          "tolerance": 0.07464553541191635,
-          "extent": {
-            "xmin": -3.0149499989999526,
-            "ymin": 42.74294000000003,
-            "xmax": 6.7878200000000675,
-            "ymax": 51.03431000000006,
-            "spatialReference": {"wkid": 4326, "latestWkid": 4326, "vcsWkid": 5773, "latestVcsWkid": 5773}
-          }
-        })
-      },
-      
-      // Strategy 2: Minimal parameters with stage filter
-      {
-        f: 'geojson',
-        where: stageNumber ? `Etape=${stageNumber}` : '1=1',
-        returnGeometry: 'true',
-        outFields: '*',
-        outSR: '102100'
-      },
-      
-      // Strategy 3: Basic parameters without filters
-      {
-        f: 'geojson',
-        returnGeometry: 'true',
-        outSR: '102100'
-      }
-    ];
-    
-    for (let i = 0; i < strategies.length; i++) {
-      try {
-        console.log(`🔄 Trying strategy ${i + 1}/${strategies.length}...`);
-        
-        const params = strategies[i];
-        const url = this.buildUrl(params);
-        const geoJsonData = await this.fetchGeoJSON(url);
-        
-        if (!geoJsonData.features) {
-          console.log(`⚠️ Strategy ${i + 1}: No features in response`);
-          continue;
+
+    const params = {
+      ...this.defaultParams,
+      where: stageNumber ? `Etape=${stageNumber}` : '1=1',
+      geometry: JSON.stringify({
+        "xmin": -560000,
+        "ymin": 5100000,
+        "xmax": 1050000,
+        "ymax": 6700000,
+        "spatialReference": { "wkid": 102100 }
+      }),
+      quantizationParameters: JSON.stringify({
+        "mode": "view",
+        "originPosition": "upperLeft",
+        "tolerance": 0.07464553541191635,
+        "extent": {
+          "xmin": -3.0149499989999526,
+          "ymin": 42.74294000000003,
+          "xmax": 6.7878200000000675,
+          "ymax": 51.03431000000006,
+          "spatialReference": { "wkid": 4326, "latestWkid": 4326, "vcsWkid": 5773, "latestVcsWkid": 5773 }
         }
-        
-        // Filter by stage if we got all stages
-        let features = geoJsonData.features;
-        if (stageNumber && features.length > 1) {
-          features = features.filter(f => f.properties.Etape == stageNumber);
-        }
-        
-        if (features.length === 0) {
-          console.log(`⚠️ Strategy ${i + 1}: No features found for stage ${stageNumber}`);
-          continue;
-        }
-        
-        console.log(`✅ Strategy ${i + 1} succeeded! Found ${features.length} feature(s)`);
-        
-        // Process the features
-        const results = [];
-        for (const feature of features) {
-          const result = await this.processFeature(feature, options);
-          results.push(result);
-        }
-        
-        return results;
-        
-      } catch (error) {
-        console.log(`❌ Strategy ${i + 1} failed: ${error.message}`);
-        if (i === strategies.length - 1) {
-          throw error; // Re-throw the last error
-        }
-      }
+      })
+    };
+
+    const url = this.buildUrl(params);
+    const geoJsonData = await this.fetchGeoJSON(url);
+
+    if (!geoJsonData.features) {
+      throw new Error('No features in response');
     }
-    
-    throw new Error(`All strategies failed for stage ${stageNumber}`);
+
+    // Filter by stage if we got all stages
+    let features = geoJsonData.features;
+    if (stageNumber && features.length > 1) {
+      features = features.filter(f => f.properties.Etape == stageNumber);
+    }
+
+    if (features.length === 0) {
+      throw new Error(`No features found for stage ${stageNumber}`);
+    }
+
+    console.log(`✅ Found ${features.length} feature(s)`);
+
+    // Process the features
+    const results = [];
+    for (const feature of features) {
+      const result = await this.processFeature(feature, options);
+      results.push(result);
+    }
+
+    return results;
   }
 
   buildUrl(params) {
     const queryString = Object.entries(params)
       .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
       .join('&');
-    
+
     return `${this.baseUrl}?${queryString}`;
   }
 
   fetchGeoJSON(url) {
     return new Promise((resolve, reject) => {
       console.log(`🔗 Full URL: ${url}`);
-      
+
       // Add browser headers to mimic successful browser request
       const urlObj = new URL(url);
       const options = {
@@ -154,11 +117,11 @@ class TDFRouteExtractor {
           'Sec-Fetch-Site': 'cross-site'
         }
       };
-      
+
       https.get(options, (response) => {
         console.log(`📊 Response status: ${response.statusCode}`);
         console.log(`📊 Response headers:`, response.headers);
-        
+
         if (response.statusCode !== 200) {
           let errorData = '';
           response.on('data', chunk => errorData += chunk);
@@ -167,11 +130,11 @@ class TDFRouteExtractor {
           });
           return;
         }
-        
+
         // Handle compressed responses
         let responseStream = response;
         const encoding = response.headers['content-encoding'];
-        
+
         if (encoding === 'br') {
           console.log('🔄 Decompressing Brotli data...');
           responseStream = response.pipe(zlib.createBrotliDecompress());
@@ -182,35 +145,35 @@ class TDFRouteExtractor {
           console.log('🔄 Decompressing Deflate data...');
           responseStream = response.pipe(zlib.createInflate());
         }
-        
+
         let data = '';
-        
+
         responseStream.on('data', chunk => {
           data += chunk;
         });
-        
+
         responseStream.on('end', () => {
           console.log(`📊 Decompressed data length: ${data.length} characters`);
           console.log(`📊 Raw response (first 200 chars): ${data.substring(0, 200)}...`);
-          
+
           try {
             const jsonData = JSON.parse(data);
-            
+
             if (jsonData.error) {
               reject(new Error(`API Error: ${jsonData.error.message || JSON.stringify(jsonData.error)}`));
               return;
             }
-            
+
             resolve(jsonData);
           } catch (error) {
             reject(new Error(`Failed to parse JSON response: ${error.message}. Raw response: ${data.substring(0, 500)}`));
           }
         });
-        
+
         responseStream.on('error', (error) => {
           reject(new Error(`Decompression error: ${error.message}`));
         });
-        
+
       }).on('error', (error) => {
         reject(new Error(`Network error: ${error.message}`));
       });
@@ -221,25 +184,25 @@ class TDFRouteExtractor {
     const properties = feature.properties || {};
     const stageName = properties.Name || `Stage ${properties.Etape || 'Unknown'}`;
     const stageNumber = properties.Etape || 'Unknown';
-    
+
     console.log(`📍 Processing: ${stageName}`);
-    
+
     if (!feature.geometry || !feature.geometry.coordinates) {
       throw new Error(`No geometry data found for ${stageName}`);
     }
-    
+
     // Convert coordinates from Web Mercator to WGS84
     const coordinates = this.convertWebMercatorToWGS84(feature.geometry.coordinates);
-    
+
     console.log(`🔄 Converted ${coordinates.length} coordinates to GPS format`);
-    
+
     // Generate GPX
     const gpxContent = this.createGPX(coordinates, stageName, properties);
-    
+
     // Save to file
     const filename = this.generateFilename(stageName, stageNumber, options.output);
     const filepath = this.saveGPX(gpxContent, filename);
-    
+
     return {
       stage: stageNumber,
       name: stageName,
@@ -252,42 +215,42 @@ class TDFRouteExtractor {
 
   convertWebMercatorToWGS84(coordinates) {
     const converted = [];
-    
+
     for (const [x, y] of coordinates) {
       // Web Mercator (EPSG:102100) to WGS84 conversion
       // Formula for EPSG:3857/102100 to WGS84
       const lon = (x / 20037508.34) * 180;
       const lat = (Math.atan(Math.exp((y / 20037508.34) * Math.PI)) - Math.PI / 4) * 2 * (180 / Math.PI);
-      
+
       // Validate coordinates are reasonable for France
       if (lon >= -5 && lon <= 10 && lat >= 41 && lat <= 52) {
         converted.push([lon, lat]);
       }
     }
-    
+
     console.log(`📐 Converted ${converted.length}/${coordinates.length} coordinates to valid France bounds`);
     return converted;
   }
 
   createGPX(coordinates, stageName, properties) {
     const { Distance, Type, Date, Heure, Cols } = properties;
-    
+
     let gpx = `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="tdf-route-extractor" xmlns="http://www.topografix.com/GPX/1/1">
   <metadata>
     <n>${stageName}</n>
     <desc>Tour de France 2025 - ${stageName}</desc>`;
-    
+
     if (Distance) {
       gpx += `
     <keywords>Tour de France, ${stageName}, ${Distance}km</keywords>`;
     }
-    
+
     gpx += `
   </metadata>
   <trk>
     <n>${stageName}</n>`;
-    
+
     if (Distance || Type || Date) {
       gpx += `
     <desc>`;
@@ -297,30 +260,30 @@ class TDFRouteExtractor {
       if (Heure) gpx += `Start: ${Heure}`;
       gpx += `</desc>`;
     }
-    
+
     gpx += `
     <trkseg>`;
-    
+
     coordinates.forEach(([lon, lat]) => {
       gpx += `
       <trkpt lat="${lat.toFixed(6)}" lon="${lon.toFixed(6)}"></trkpt>`;
     });
-    
+
     gpx += `
     </trkseg>
   </trk>`;
-    
+
     // Add climbs as waypoints
     if (Cols) {
       const climbs = Cols.split(/\r?\n/).filter(climb => climb.trim());
-      
+
       climbs.forEach((climb, index) => {
         // Distribute climbs along the route
         const climbIndex = Math.floor((index + 1) * coordinates.length / (climbs.length + 1));
         if (coordinates[climbIndex]) {
           const [lon, lat] = coordinates[climbIndex];
           const climbName = climb.split(' - ')[0] || `Climb ${index + 1}`;
-          
+
           gpx += `
   <wpt lat="${lat.toFixed(6)}" lon="${lon.toFixed(6)}">
     <n>${climbName}</n>
@@ -330,54 +293,54 @@ class TDFRouteExtractor {
         }
       });
     }
-    
+
     gpx += `
 </gpx>`;
-    
+
     return gpx;
   }
 
   generateFilename(stageName, stageNumber, outputPath) {
     const safeName = stageName.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_');
     const filename = `TDF2025_Stage${stageNumber}_${safeName}.gpx`;
-    
+
     if (outputPath) {
       return path.join(outputPath, filename);
     }
-    
+
     return filename;
   }
 
   saveGPX(content, filename) {
     const outputDir = path.dirname(filename);
-    
+
     // Create directory if it doesn't exist
     if (outputDir !== '.' && !fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
-    
+
     fs.writeFileSync(filename, content, 'utf8');
     console.log(`💾 Saved: ${filename}`);
-    
+
     return path.resolve(filename);
   }
 
   async extractAllStages(options = {}) {
     console.log('🚴‍♂️ Extracting all Tour de France 2025 stages...');
-    
+
     try {
       // Get all stages (no stage filter)
       const params = { ...this.defaultParams };
       const url = this.buildUrl(params);
-      
+
       const geoJsonData = await this.fetchGeoJSON(url);
-      
+
       if (!geoJsonData.features || geoJsonData.features.length === 0) {
         throw new Error('No route data found');
       }
-      
+
       console.log(`✅ Found ${geoJsonData.features.length} total stages`);
-      
+
       const results = [];
       for (const feature of geoJsonData.features) {
         try {
@@ -387,9 +350,9 @@ class TDFRouteExtractor {
           console.error(`❌ Error processing stage: ${error.message}`);
         }
       }
-      
+
       return results;
-      
+
     } catch (error) {
       console.error(`❌ Error extracting all stages:`, error.message);
       throw error;
@@ -400,7 +363,7 @@ class TDFRouteExtractor {
 // CLI Interface
 async function main() {
   const args = process.argv.slice(2);
-  
+
   if (args.includes('--help') || args.includes('-h')) {
     console.log(`
 🚴‍♂️ Tour de France Route Extractor
@@ -421,35 +384,35 @@ EXAMPLES:
     `);
     return;
   }
-  
+
   const extractor = new TDFRouteExtractor();
   const options = {};
-  
+
   // Parse options
   const outputIndex = args.findIndex(arg => arg === '--output' || arg === '-o');
   if (outputIndex !== -1 && args[outputIndex + 1]) {
     options.output = args[outputIndex + 1];
   }
-  
+
   try {
     if (args.includes('--all')) {
       // Extract all stages
       const results = await extractor.extractAllStages(options);
-      
+
       console.log('\n🎉 Extraction complete!');
       console.log(`📊 Successfully extracted ${results.length} stages:`);
-      
+
       results.forEach(result => {
         console.log(`  Stage ${result.stage}: ${result.name} (${result.coordinates} points) → ${result.file}`);
       });
-      
+
     } else if (args.includes('--list')) {
       // List stages (get basic info without full extraction)
       console.log('📋 Fetching stage list...');
       const params = { ...extractor.defaultParams, returnGeometry: 'false' };
       const url = extractor.buildUrl(params);
       const data = await extractor.fetchGeoJSON(url);
-      
+
       console.log('\n🚴‍♂️ Tour de France 2025 Stages:');
       data.features
         .sort((a, b) => (a.properties.Etape || 0) - (b.properties.Etape || 0))
@@ -457,20 +420,20 @@ EXAMPLES:
           const { Etape, Name, Distance, Type, Date } = feature.properties;
           console.log(`  Stage ${Etape}: ${Name} (${Distance}km, ${Type}) - ${Date}`);
         });
-      
+
     } else {
       // Extract specific stage
       const stageNumber = parseInt(args[0]);
-      
+
       if (!stageNumber || stageNumber < 1 || stageNumber > 21) {
         console.error('❌ Please provide a valid stage number (1-21)');
         console.log('Usage: npx tdf-route-extractor <stage-number>');
         console.log('Or use: npx tdf-route-extractor --help');
         process.exit(1);
       }
-      
+
       const results = await extractor.extractStage(stageNumber, options);
-      
+
       console.log('\n🎉 Extraction complete!');
       results.forEach(result => {
         console.log(`✅ Stage ${result.stage}: ${result.name}`);
@@ -479,7 +442,7 @@ EXAMPLES:
         console.log(`   💾 File: ${result.file}`);
       });
     }
-    
+
   } catch (error) {
     console.error(`❌ Error: ${error.message}`);
     process.exit(1);
