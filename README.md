@@ -7,7 +7,6 @@ Extract official Tour de France 2025 route data and convert to GPX format for GP
 ```bash
 git clone https://github.com/jmattson/tdf-route-extractor.git
 cd tdf-route-extractor
-npm install
 ```
 
 ## Usage
