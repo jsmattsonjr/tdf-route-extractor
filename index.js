@@ -409,7 +409,7 @@ EXAMPLES:
     } else if (args.includes('--list')) {
       // List stages (get basic info without full extraction)
       console.log('📋 Fetching stage list...');
-      const params = { ...extractor.defaultParams, returnGeometry: 'false' };
+      const params = { ...extractor.defaultParams, returnGeometry: 'false', where: '1=1' };
       const url = extractor.buildUrl(params);
       const data = await extractor.fetchGeoJSON(url);
 
