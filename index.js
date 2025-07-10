@@ -198,19 +198,8 @@ class TDFRouteExtractor {
     if (geometryType === 'MultiLineString') {
       console.log(`🔀 Found MultiLineString with ${coordinates.length} LineStrings`);
 
-      // Find the LineString with the most coordinates
-      let longestLineString = coordinates[0];
-      let maxLength = coordinates[0].length;
-
-      for (let i = 1; i < coordinates.length; i++) {
-        if (coordinates[i].length > maxLength) {
-          maxLength = coordinates[i].length;
-          longestLineString = coordinates[i];
-        }
-      }
-
-      console.log(`📏 Selected LineString with ${maxLength} coordinates (others: ${coordinates.map(ls => ls.length).filter(len => len !== maxLength).join(', ')})`);
-      coordinates = longestLineString;
+      // Try to connect LineStrings, fallback to longest if no connections
+      coordinates = this.connectLineStrings(coordinates, stageName);
     } else if (geometryType === 'LineString') {
       console.log(`📏 Found LineString with ${coordinates.length} coordinates`);
     } else {
@@ -257,6 +246,103 @@ class TDFRouteExtractor {
 
     console.log(`📐 Converted ${converted.length}/${coordinates.length} coordinates to valid France bounds`);
     return converted;
+  }
+
+  calculateDistance(point1, point2) {
+    const [x1, y1] = point1;
+    const [x2, y2] = point2;
+    return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+  }
+
+  findConnectableLineStrings(lineStrings, maxDistance = 10) {
+    const connectable = [];
+    const significant = lineStrings.filter(ls => ls.length > 100).sort((a, b) => b.length - a.length);
+    
+    console.log(`🔍 Analyzing ${significant.length} significant LineStrings for connections`);
+    
+    for (let i = 0; i < significant.length; i++) {
+      for (let j = i + 1; j < significant.length; j++) {
+        const ls1 = significant[i];
+        const ls2 = significant[j];
+        
+        const ls1Start = ls1[0];
+        const ls1End = ls1[ls1.length - 1];
+        const ls2Start = ls2[0];
+        const ls2End = ls2[ls2.length - 1];
+        
+        const distances = [
+          { type: 'start-start', distance: this.calculateDistance(ls1Start, ls2Start) },
+          { type: 'start-end', distance: this.calculateDistance(ls1Start, ls2End) },
+          { type: 'end-start', distance: this.calculateDistance(ls1End, ls2Start) },
+          { type: 'end-end', distance: this.calculateDistance(ls1End, ls2End) }
+        ];
+        
+        const closeConnection = distances.find(d => d.distance <= maxDistance);
+        if (closeConnection) {
+          connectable.push({
+            index1: i,
+            index2: j,
+            lineString1: ls1,
+            lineString2: ls2,
+            connection: closeConnection,
+            totalLength: ls1.length + ls2.length
+          });
+        }
+      }
+    }
+    
+    return connectable;
+  }
+
+  connectLineStrings(lineStrings, stageName) {
+    const connectable = this.findConnectableLineStrings(lineStrings);
+    
+    if (connectable.length === 0) {
+      console.log('🚫 No connectable LineStrings found, using longest');
+      return lineStrings.reduce((longest, current) => 
+        current.length > longest.length ? current : longest
+      );
+    }
+    
+    const bestConnection = connectable.reduce((best, current) => 
+      current.totalLength > best.totalLength ? current : best
+    );
+    
+    console.log(`🔗 Connecting LineStrings: ${bestConnection.lineString1.length} + ${bestConnection.lineString2.length} coordinates`);
+    console.log(`🔗 Connection type: ${bestConnection.connection.type} (${bestConnection.connection.distance.toFixed(2)}m apart)`);
+    
+    let connected = [];
+    const ls1 = bestConnection.lineString1;
+    const ls2 = bestConnection.lineString2;
+    
+    switch (bestConnection.connection.type) {
+      case 'start-start':
+        connected = [...ls1.slice().reverse(), ...ls2.slice(1)];
+        break;
+      case 'start-end':
+        connected = [...ls2, ...ls1.slice(1)];
+        break;
+      case 'end-start':
+        connected = [...ls1, ...ls2.slice(1)];
+        break;
+      case 'end-end':
+        connected = [...ls1, ...ls2.slice().reverse().slice(1)];
+        break;
+    }
+    
+    console.log(`🔗 Connected route: ${connected.length} total coordinates`);
+    
+    if (stageName.includes('>')) {
+      const [start, end] = stageName.split('>').map(s => s.trim());
+      console.log(`🧭 Stage direction: ${start} → ${end}`);
+      
+      const firstPoint = this.convertWebMercatorToWGS84([connected[0]])[0];
+      const lastPoint = this.convertWebMercatorToWGS84([connected[connected.length - 1]])[0];
+      
+      console.log(`🧭 Route: ${firstPoint[1].toFixed(4)}°E,${firstPoint[0].toFixed(4)}°N → ${lastPoint[1].toFixed(4)}°E,${lastPoint[0].toFixed(4)}°N`);
+    }
+    
+    return connected;
   }
 
   createGPX(coordinates, stageName, properties) {
