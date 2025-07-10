@@ -4,8 +4,8 @@
  * Tour de France Route Extractor
  * Extracts official route data and converts to GPX
  * 
- * Usage: npx tdf-route-extractor <stage-number>
- * Example: npx tdf-route-extractor 6
+ * Usage: node index.js <stage-number>
+ * Example: node index.js 6
  */
 
 const https = require('https');
@@ -397,18 +397,18 @@ async function main() {
 🚴‍♂️ Tour de France Route Extractor
 
 USAGE:
-  npx tdf-route-extractor <stage-number>     Extract specific stage
-  npx tdf-route-extractor --all              Extract all stages
-  npx tdf-route-extractor --list             List available stages
+  node index.js <stage-number>     Extract specific stage
+  node index.js --all              Extract all stages
+  node index.js --list             List available stages
 
 OPTIONS:
   --output, -o <path>     Output directory (default: current directory)
   --help, -h              Show this help message
 
 EXAMPLES:
-  npx tdf-route-extractor 6                  Extract Stage 6
-  npx tdf-route-extractor 4 --output ./gpx   Extract Stage 4 to ./gpx/
-  npx tdf-route-extractor --all -o ./routes  Extract all stages to ./routes/
+  node index.js 6                  Extract Stage 6
+  node index.js 4 --output ./gpx   Extract Stage 4 to ./gpx/
+  node index.js --all -o ./routes  Extract all stages to ./routes/
     `);
     return;
   }
@@ -455,8 +455,8 @@ EXAMPLES:
 
       if (!stageNumber || stageNumber < 1 || stageNumber > 21) {
         console.error('❌ Please provide a valid stage number (1-21)');
-        console.log('Usage: npx tdf-route-extractor <stage-number>');
-        console.log('Or use: npx tdf-route-extractor --help');
+        console.log('Usage: node index.js <stage-number>');
+        console.log('Or use: node index.js --help');
         process.exit(1);
       }
 

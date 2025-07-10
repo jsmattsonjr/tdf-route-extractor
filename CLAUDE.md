@@ -11,9 +11,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Running the CLI
 - `npm start` - Runs the main CLI application
 - `node index.js` - Direct execution of the CLI tool
-- `npx tdf-route-extractor <stage-number>` - Run as CLI tool with stage number (1-21)
-- `npx tdf-route-extractor --all` - Extract all Tour de France stages
-- `npx tdf-route-extractor --list` - List available stages without extraction
+- `node index.js <stage-number>` - Run with stage number (1-21)
+- `node index.js --all` - Extract all Tour de France stages
+- `node index.js --list` - List available stages without extraction
 
 ## Project Architecture
 
