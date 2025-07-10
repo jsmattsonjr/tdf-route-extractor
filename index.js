@@ -291,8 +291,8 @@ class TDFRouteExtractor {
 
     console.log(`🔄 Converted ${convertedCoordinates.length} coordinates to GPS format`);
 
-    // Generate GPX
-    const gpxContent = this.createGPX(convertedCoordinates, stageName, properties);
+    // Generate GPX with official waypoints
+    const gpxContent = this.createGPX(convertedCoordinates, stageName, properties, waypoints);
 
     // Save to file
     const filename = this.generateFilename(stageName, stageNumber, options.output);
@@ -513,7 +513,7 @@ class TDFRouteExtractor {
     }
   }
 
-  createGPX(coordinates, stageName, properties) {
+  createGPX(coordinates, stageName, properties, waypoints = null) {
     const { Distance, Type, Date, Heure, Cols } = properties;
 
     let gpx = `<?xml version="1.0" encoding="UTF-8"?>
@@ -554,8 +554,53 @@ class TDFRouteExtractor {
     </trkseg>
   </trk>`;
 
-    // Add climbs as waypoints
-    if (Cols) {
+    // Add official waypoints if available
+    if (waypoints) {
+      // Add start waypoint
+      if (waypoints.start) {
+        const [lon, lat] = waypoints.start.coordinates;
+        gpx += `
+  <wpt lat="${lat.toFixed(6)}" lon="${lon.toFixed(6)}">
+    <name>${waypoints.start.name}</name>
+    <desc>Départ: ${waypoints.start.description || waypoints.start.name}</desc>
+    <type>start</type>
+  </wpt>`;
+      }
+
+      // Add climb waypoints with precise coordinates
+      waypoints.climbs.forEach((climb) => {
+        const [lon, lat] = climb.coordinates;
+        gpx += `
+  <wpt lat="${lat.toFixed(6)}" lon="${lon.toFixed(6)}">
+    <name>${climb.name}</name>
+    <desc>${climb.description || climb.type}</desc>
+    <type>climb</type>
+  </wpt>`;
+      });
+
+      // Add sprint waypoints with precise coordinates
+      waypoints.sprints.forEach((sprint) => {
+        const [lon, lat] = sprint.coordinates;
+        gpx += `
+  <wpt lat="${lat.toFixed(6)}" lon="${lon.toFixed(6)}">
+    <name>${sprint.name}</name>
+    <desc>${sprint.description || 'Sprint'}</desc>
+    <type>sprint</type>
+  </wpt>`;
+      });
+
+      // Add finish waypoint
+      if (waypoints.finish) {
+        const [lon, lat] = waypoints.finish.coordinates;
+        gpx += `
+  <wpt lat="${lat.toFixed(6)}" lon="${lon.toFixed(6)}">
+    <name>${waypoints.finish.name}</name>
+    <desc>Arrivée: ${waypoints.finish.description || waypoints.finish.name}</desc>
+    <type>finish</type>
+  </wpt>`;
+      }
+    } else if (Cols) {
+      // Fallback to old method if no official waypoints available
       const climbs = Cols.split(/\r?\n/).filter(climb => climb.trim());
 
       climbs.forEach((climb, index) => {
