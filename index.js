@@ -266,17 +266,25 @@ class TDFRouteExtractor {
     // Fetch official waypoints for this stage
     const waypoints = await this.fetchStageWaypoints(stageNumber);
 
-    // Handle MultiLineString by selecting the LineString with the most coordinates
+    // Convert all coordinates from Web Mercator to WGS84 immediately
     let coordinates = feature.geometry.coordinates;
     const geometryType = feature.geometry.type;
 
     if (geometryType === 'MultiLineString') {
       console.log(`🔀 Found MultiLineString with ${coordinates.length} LineStrings`);
 
+      // Convert each LineString from Web Mercator to WGS84
+      coordinates = coordinates.map(lineString => this.convertWebMercatorToWGS84(lineString));
+      console.log(`🔄 Converted ${coordinates.length} LineStrings to WGS84 format`);
+
       // Try to connect LineStrings, fallback to longest if no connections
       coordinates = this.connectLineStrings(coordinates, stageName, waypoints);
     } else if (geometryType === 'LineString') {
       console.log(`📏 Found LineString with ${coordinates.length} coordinates`);
+
+      // Convert from Web Mercator to WGS84
+      coordinates = this.convertWebMercatorToWGS84(coordinates);
+      console.log(`🔄 Converted ${coordinates.length} coordinates to WGS84 format`);
 
       // Validate direction for single LineString using finish waypoint
       if (waypoints && waypoints.finish) {
@@ -286,16 +294,13 @@ class TDFRouteExtractor {
       throw new Error(`Unsupported geometry type: ${geometryType}`);
     }
 
-    // Convert coordinates from Web Mercator to WGS84
-    const convertedCoordinates = this.convertWebMercatorToWGS84(coordinates);
-
-    console.log(`🔄 Converted ${convertedCoordinates.length} coordinates to GPS format`);
+    console.log(`📏 Final route: ${coordinates.length} coordinates in WGS84 format`);
 
     // Sanity check: verify route starts and ends near official waypoints
-    this.validateRouteEndpoints(convertedCoordinates, waypoints, stageName);
+    this.validateRouteEndpoints(coordinates, waypoints, stageName);
 
     // Generate GPX with official waypoints
-    const gpxContent = this.createGPX(convertedCoordinates, stageName, properties, waypoints);
+    const gpxContent = this.createGPX(coordinates, stageName, properties, waypoints);
 
     // Save to file
     const filename = this.generateFilename(stageName, stageNumber, options.output);
@@ -304,7 +309,7 @@ class TDFRouteExtractor {
     return {
       stage: stageNumber,
       name: stageName,
-      coordinates: convertedCoordinates.length,
+      coordinates: coordinates.length,
       distance: properties.Distance,
       file: filepath,
       properties,
@@ -444,10 +449,10 @@ class TDFRouteExtractor {
       const [start, end] = stageName.split('>').map(s => s.trim());
       console.log(`🧭 Stage direction: ${start} → ${end}`);
 
-      const firstPoint = this.convertWebMercatorToWGS84([connected[0]])[0];
-      const lastPoint = this.convertWebMercatorToWGS84([connected[connected.length - 1]])[0];
+      const firstPoint = connected[0]; // Already in WGS84 [lon, lat]
+      const lastPoint = connected[connected.length - 1]; // Already in WGS84 [lon, lat]
 
-      console.log(`🧭 Route: ${firstPoint[1].toFixed(4)}°E,${firstPoint[0].toFixed(4)}°N → ${lastPoint[1].toFixed(4)}°E,${lastPoint[0].toFixed(4)}°N`);
+      console.log(`🧭 Route: ${firstPoint[0].toFixed(4)}°E,${firstPoint[1].toFixed(4)}°N → ${lastPoint[0].toFixed(4)}°E,${lastPoint[1].toFixed(4)}°N`);
     }
 
     return connected;
@@ -455,17 +460,17 @@ class TDFRouteExtractor {
 
   validateRouteDirectionByFinish(coordinates, finishWaypoint) {
     // Check which end of the route is closer to the finish waypoint
-    // convertWebMercatorToWGS84 returns [lon, lat], but calculateGPSDistance expects [lat, lon]
-    const routeStartWGS84 = this.convertWebMercatorToWGS84([coordinates[0]])[0]; // [lon, lat]
-    const routeEndWGS84 = this.convertWebMercatorToWGS84([coordinates[coordinates.length - 1]])[0]; // [lon, lat]
+    // coordinates are already in WGS84 format [lon, lat]
+    const routeStart = coordinates[0]; // [lon, lat]
+    const routeEnd = coordinates[coordinates.length - 1]; // [lon, lat]
 
     // Convert to [lat, lon] for distance calculation
-    const routeStart = [routeStartWGS84[1], routeStartWGS84[0]];
-    const routeEnd = [routeEndWGS84[1], routeEndWGS84[0]];
+    const routeStartLatLon = [routeStart[1], routeStart[0]];
+    const routeEndLatLon = [routeEnd[1], routeEnd[0]];
     const officialFinish = [finishWaypoint.coordinates[1], finishWaypoint.coordinates[0]]; // waypoint is [lon,lat], convert to [lat,lon]
 
-    const startToFinishDistance = this.calculateGPSDistance(routeStart, officialFinish);
-    const endToFinishDistance = this.calculateGPSDistance(routeEnd, officialFinish);
+    const startToFinishDistance = this.calculateGPSDistance(routeStartLatLon, officialFinish);
+    const endToFinishDistance = this.calculateGPSDistance(routeEndLatLon, officialFinish);
 
     console.log(`🧭 Finish validation: ${finishWaypoint.name}`);
     console.log(`🧭 Route start to finish: ${(startToFinishDistance * 1000).toFixed(0)}m`);
