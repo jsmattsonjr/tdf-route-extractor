@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="tdf-route-extractor" xmlns="http://www.topografix.com/GPX/1/1">
   <metadata>
-    <n>BAYEUX > VIRE NORMANDIE</n>
+    <name>BAYEUX > VIRE NORMANDIE</name>
     <desc>Tour de France 2025 - BAYEUX > VIRE NORMANDIE</desc>
     <keywords>Tour de France, BAYEUX > VIRE NORMANDIE, 201.5km</keywords>
   </metadata>
   <trk>
-    <n>BAYEUX > VIRE NORMANDIE</n>
+    <name>BAYEUX > VIRE NORMANDIE</name>
     <desc>Distance: 201.5km Type: Accidentée Date: 10/07 Start: 12:45</desc>
     <trkseg>
       <trkpt lat="49.279310" lon="-0.707310"></trkpt>
@@ -6880,32 +6880,32 @@
     </trkseg>
   </trk>
   <wpt lat="49.052810" lon="-0.658000">
-    <n>Côte du Mont Pinçon</n>
+    <name>Côte du Mont Pinçon</name>
     <desc>Côte du Mont Pinçon - 5,6 km de montée à 3.7% - Catégorie 3</desc>
     <type>climb</type>
   </wpt>
   <wpt lat="48.914690" lon="-0.458730">
-    <n>Côte de la Raçonnière</n>
+    <name>Côte de la Raçonnière</name>
     <desc>Côte de la Raçonnière - 2,2km de montée à 7.8% - Catégorie 3</desc>
     <type>climb</type>
   </wpt>
   <wpt lat="48.787170" lon="-0.523430">
-    <n>Côte de Mortain Cote 314</n>
+    <name>Côte de Mortain Cote 314</name>
     <desc>Côte de Mortain Cote 314 - 1,7km de montée à 9.6% - Catégorie 3</desc>
     <type>climb</type>
   </wpt>
   <wpt lat="48.666930" lon="-0.762450">
-    <n>Côte de Juvigny-le-Tertre</n>
+    <name>Côte de Juvigny-le-Tertre</name>
     <desc>Côte de Juvigny-le-Tertre - 2,2km de montée à 7.3% - Catégorie 3</desc>
     <type>climb</type>
   </wpt>
   <wpt lat="48.692400" lon="-0.983870">
-    <n>Côte de Saint-Michel-de-Montjoie</n>
+    <name>Côte de Saint-Michel-de-Montjoie</name>
     <desc>Côte de Saint-Michel-de-Montjoie - 3,7km de montée à 4.5% - Catégorie 3</desc>
     <type>climb</type>
   </wpt>
   <wpt lat="48.767630" lon="-1.017260">
-    <n>Côte de Vaudry</n>
+    <name>Côte de Vaudry</name>
     <desc>Côte de Vaudry - 1,2km de montée à 7.2% - Catégorie 4</desc>
     <type>climb</type>
   </wpt>

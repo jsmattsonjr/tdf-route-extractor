@@ -191,13 +191,39 @@ class TDFRouteExtractor {
       throw new Error(`No geometry data found for ${stageName}`);
     }
 
-    // Convert coordinates from Web Mercator to WGS84
-    const coordinates = this.convertWebMercatorToWGS84(feature.geometry.coordinates);
+    // Handle MultiLineString by selecting the LineString with the most coordinates
+    let coordinates = feature.geometry.coordinates;
+    const geometryType = feature.geometry.type;
 
-    console.log(`🔄 Converted ${coordinates.length} coordinates to GPS format`);
+    if (geometryType === 'MultiLineString') {
+      console.log(`🔀 Found MultiLineString with ${coordinates.length} LineStrings`);
+
+      // Find the LineString with the most coordinates
+      let longestLineString = coordinates[0];
+      let maxLength = coordinates[0].length;
+
+      for (let i = 1; i < coordinates.length; i++) {
+        if (coordinates[i].length > maxLength) {
+          maxLength = coordinates[i].length;
+          longestLineString = coordinates[i];
+        }
+      }
+
+      console.log(`📏 Selected LineString with ${maxLength} coordinates (others: ${coordinates.map(ls => ls.length).filter(len => len !== maxLength).join(', ')})`);
+      coordinates = longestLineString;
+    } else if (geometryType === 'LineString') {
+      console.log(`📏 Found LineString with ${coordinates.length} coordinates`);
+    } else {
+      throw new Error(`Unsupported geometry type: ${geometryType}`);
+    }
+
+    // Convert coordinates from Web Mercator to WGS84
+    const convertedCoordinates = this.convertWebMercatorToWGS84(coordinates);
+
+    console.log(`🔄 Converted ${convertedCoordinates.length} coordinates to GPS format`);
 
     // Generate GPX
-    const gpxContent = this.createGPX(coordinates, stageName, properties);
+    const gpxContent = this.createGPX(convertedCoordinates, stageName, properties);
 
     // Save to file
     const filename = this.generateFilename(stageName, stageNumber, options.output);
@@ -206,10 +232,11 @@ class TDFRouteExtractor {
     return {
       stage: stageNumber,
       name: stageName,
-      coordinates: coordinates.length,
+      coordinates: convertedCoordinates.length,
       distance: properties.Distance,
       file: filepath,
-      properties
+      properties,
+      geometryType: geometryType
     };
   }
 
@@ -238,7 +265,7 @@ class TDFRouteExtractor {
     let gpx = `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="tdf-route-extractor" xmlns="http://www.topografix.com/GPX/1/1">
   <metadata>
-    <n>${stageName}</n>
+    <name>${stageName}</name>
     <desc>Tour de France 2025 - ${stageName}</desc>`;
 
     if (Distance) {
@@ -249,7 +276,7 @@ class TDFRouteExtractor {
     gpx += `
   </metadata>
   <trk>
-    <n>${stageName}</n>`;
+    <name>${stageName}</name>`;
 
     if (Distance || Type || Date) {
       gpx += `
@@ -286,7 +313,7 @@ class TDFRouteExtractor {
 
           gpx += `
   <wpt lat="${lat.toFixed(6)}" lon="${lon.toFixed(6)}">
-    <n>${climbName}</n>
+    <name>${climbName}</name>
     <desc>${climb}</desc>
     <type>climb</type>
   </wpt>`;
@@ -404,7 +431,7 @@ EXAMPLES:
       console.log(`📊 Successfully extracted ${results.length} stages:`);
 
       results.forEach(result => {
-        console.log(`  Stage ${result.stage}: ${result.name} (${result.coordinates} points) → ${result.file}`);
+        console.log(`  Stage ${result.stage}: ${result.name} (${result.coordinates} points, ${result.geometryType}) → ${result.file}`);
       });
 
     } else if (args.includes('--list')) {
@@ -440,6 +467,7 @@ EXAMPLES:
         console.log(`✅ Stage ${result.stage}: ${result.name}`);
         console.log(`   📏 Distance: ${result.distance}km`);
         console.log(`   📍 Coordinates: ${result.coordinates} points`);
+        console.log(`   🗺️  Geometry: ${result.geometryType}`);
         console.log(`   💾 File: ${result.file}`);
       });
     }
