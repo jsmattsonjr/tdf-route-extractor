@@ -17,6 +17,7 @@ class TDFRouteExtractor {
   constructor() {
     // Updated to use the working URL pattern from user's success
     this.baseUrl = 'https://services9.arcgis.com/euYKeqX7FwwgASW5/arcgis/rest/services/TDF25/FeatureServer/2/query';
+    this.pointsUrl = 'https://services9.arcgis.com/euYKeqX7FwwgASW5/arcgis/rest/services/TDF25/FeatureServer/0/query';
     this.defaultParams = {
       f: 'geojson',
       returnGeometry: 'true',
@@ -92,6 +93,14 @@ class TDFRouteExtractor {
       .join('&');
 
     return `${this.baseUrl}?${queryString}`;
+  }
+
+  buildPointsUrl(params) {
+    const queryString = Object.entries(params)
+      .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+      .join('&');
+
+    return `${this.pointsUrl}?${queryString}`;
   }
 
   fetchGeoJSON(url) {
@@ -180,6 +189,69 @@ class TDFRouteExtractor {
     });
   }
 
+  async fetchStageWaypoints(stageNumber) {
+    const params = {
+      f: 'geojson',
+      where: `Etape='${stageNumber}'`,
+      outFields: '*',
+      returnGeometry: 'true'
+    };
+
+    const url = this.buildPointsUrl(params);
+    console.log(`🚩 Fetching waypoints for Stage ${stageNumber}...`);
+    
+    try {
+      const data = await this.fetchGeoJSON(url);
+      const waypoints = {
+        start: null,
+        finish: null,
+        climbs: [],
+        sprints: [],
+        other: []
+      };
+
+      if (data.features) {
+        for (const feature of data.features) {
+          const props = feature.properties;
+          const snippet = props.Snippet;
+          const coords = feature.geometry.coordinates;
+          
+          const waypoint = {
+            name: props.Name,
+            type: snippet,
+            coordinates: coords,
+            distance: props.Distance,
+            date: props.Date,
+            description: props.Texte
+          };
+
+          if (snippet === 'Départ réel') {
+            waypoints.start = waypoint;
+          } else if (snippet === 'Arrivée' || (snippet && snippet.startsWith('Arrivée/'))) {
+            waypoints.finish = waypoint;
+          } else if (snippet && snippet.includes('Catégorie') && !snippet.startsWith('Arrivée/')) {
+            waypoints.climbs.push(waypoint);
+          } else if (snippet === 'Sprint') {
+            waypoints.sprints.push(waypoint);
+          } else {
+            waypoints.other.push(waypoint);
+          }
+        }
+      }
+
+      console.log(`🚩 Found ${data.features?.length || 0} waypoints for Stage ${stageNumber}`);
+      console.log(`   📍 Start: ${waypoints.start ? waypoints.start.name : 'Not found'}`);
+      console.log(`   🏁 Finish: ${waypoints.finish ? waypoints.finish.name : 'Not found'}`);
+      console.log(`   ⛰️  Climbs: ${waypoints.climbs.length}`);
+      console.log(`   🏃 Sprints: ${waypoints.sprints.length}`);
+
+      return waypoints;
+    } catch (error) {
+      console.error(`❌ Failed to fetch waypoints for Stage ${stageNumber}:`, error.message);
+      return null;
+    }
+  }
+
   async processFeature(feature, options) {
     const properties = feature.properties || {};
     const stageName = properties.Name || `Stage ${properties.Etape || 'Unknown'}`;
@@ -191,6 +263,9 @@ class TDFRouteExtractor {
       throw new Error(`No geometry data found for ${stageName}`);
     }
 
+    // Fetch official waypoints for this stage
+    const waypoints = await this.fetchStageWaypoints(stageNumber);
+
     // Handle MultiLineString by selecting the LineString with the most coordinates
     let coordinates = feature.geometry.coordinates;
     const geometryType = feature.geometry.type;
@@ -199,9 +274,14 @@ class TDFRouteExtractor {
       console.log(`🔀 Found MultiLineString with ${coordinates.length} LineStrings`);
 
       // Try to connect LineStrings, fallback to longest if no connections
-      coordinates = this.connectLineStrings(coordinates, stageName);
+      coordinates = this.connectLineStrings(coordinates, stageName, waypoints);
     } else if (geometryType === 'LineString') {
       console.log(`📏 Found LineString with ${coordinates.length} coordinates`);
+      
+      // Validate direction for single LineString using waypoints
+      if (waypoints && waypoints.start && waypoints.finish) {
+        coordinates = this.validateRouteDirection(coordinates, waypoints);
+      }
     } else {
       throw new Error(`Unsupported geometry type: ${geometryType}`);
     }
@@ -254,6 +334,21 @@ class TDFRouteExtractor {
     return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
   }
 
+  calculateGPSDistance(point1, point2) {
+    const [lat1, lon1] = point1;
+    const [lat2, lon2] = point2;
+    
+    const R = 6378137.0; // WGS84 equatorial radius in meters
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    
+    return (R * c) / 1000; // Distance in kilometers
+  }
+
   findConnectableLineStrings(lineStrings, maxDistance = 10) {
     const connectable = [];
     const significant = lineStrings.filter(ls => ls.length > 100).sort((a, b) => b.length - a.length);
@@ -294,14 +389,21 @@ class TDFRouteExtractor {
     return connectable;
   }
 
-  connectLineStrings(lineStrings, stageName) {
+  connectLineStrings(lineStrings, stageName, waypoints = null) {
     const connectable = this.findConnectableLineStrings(lineStrings);
     
     if (connectable.length === 0) {
       console.log('🚫 No connectable LineStrings found, using longest');
-      return lineStrings.reduce((longest, current) => 
+      const longest = lineStrings.reduce((longest, current) => 
         current.length > longest.length ? current : longest
       );
+      
+      // Validate direction for longest LineString using waypoints
+      if (waypoints && waypoints.start && waypoints.finish) {
+        return this.validateRouteDirection(longest, waypoints);
+      }
+      
+      return longest;
     }
     
     const bestConnection = connectable.reduce((best, current) => 
@@ -332,7 +434,38 @@ class TDFRouteExtractor {
     
     console.log(`🔗 Connected route: ${connected.length} total coordinates`);
     
-    if (stageName.includes('>')) {
+    // Validate route direction using official waypoints
+    if (waypoints && waypoints.start && waypoints.finish) {
+      const routeStart = this.convertWebMercatorToWGS84([connected[0]])[0];
+      const routeEnd = this.convertWebMercatorToWGS84([connected[connected.length - 1]])[0];
+      const officialStart = [waypoints.start.coordinates[1], waypoints.start.coordinates[0]]; // lon,lat to lat,lon
+      const officialFinish = [waypoints.finish.coordinates[1], waypoints.finish.coordinates[0]];
+      
+      console.log(`🧭 Official: ${waypoints.start.name} (${officialStart[0].toFixed(4)}°N,${officialStart[1].toFixed(4)}°E) → ${waypoints.finish.name} (${officialFinish[0].toFixed(4)}°N,${officialFinish[1].toFixed(4)}°E)`);
+      console.log(`🧭 Route:    ${routeStart[0].toFixed(4)}°N,${routeStart[1].toFixed(4)}°E → ${routeEnd[0].toFixed(4)}°N,${routeEnd[1].toFixed(4)}°E`);
+      
+      // Calculate distances to determine if route is in correct direction
+      const distanceStartToStart = this.calculateGPSDistance(routeStart, officialStart);
+      const distanceEndToFinish = this.calculateGPSDistance(routeEnd, officialFinish);
+      const distanceStartToFinish = this.calculateGPSDistance(routeStart, officialFinish);
+      const distanceEndToStart = this.calculateGPSDistance(routeEnd, officialStart);
+      
+      const forwardScore = distanceStartToStart + distanceEndToFinish;
+      const backwardScore = distanceStartToFinish + distanceEndToStart;
+      
+      console.log(`🧭 Direction check: Forward=${forwardScore.toFixed(2)}km, Backward=${backwardScore.toFixed(2)}km`);
+      
+      if (backwardScore < forwardScore) {
+        console.log('🔄 Route appears to be backwards, reversing...');
+        connected = connected.slice().reverse();
+        
+        const newRouteStart = this.convertWebMercatorToWGS84([connected[0]])[0];
+        const newRouteEnd = this.convertWebMercatorToWGS84([connected[connected.length - 1]])[0];
+        console.log(`🧭 Reversed: ${newRouteStart[0].toFixed(4)}°N,${newRouteStart[1].toFixed(4)}°E → ${newRouteEnd[0].toFixed(4)}°N,${newRouteEnd[1].toFixed(4)}°E`);
+      } else {
+        console.log('✅ Route direction appears correct');
+      }
+    } else if (stageName.includes('>')) {
       const [start, end] = stageName.split('>').map(s => s.trim());
       console.log(`🧭 Stage direction: ${start} → ${end}`);
       
@@ -343,6 +476,41 @@ class TDFRouteExtractor {
     }
     
     return connected;
+  }
+
+  validateRouteDirection(coordinates, waypoints) {
+    const routeStart = this.convertWebMercatorToWGS84([coordinates[0]])[0];
+    const routeEnd = this.convertWebMercatorToWGS84([coordinates[coordinates.length - 1]])[0];
+    const officialStart = [waypoints.start.coordinates[1], waypoints.start.coordinates[0]]; // lon,lat to lat,lon
+    const officialFinish = [waypoints.finish.coordinates[1], waypoints.finish.coordinates[0]];
+    
+    console.log(`🧭 Official: ${waypoints.start.name} (${officialStart[0].toFixed(4)}°N,${officialStart[1].toFixed(4)}°E) → ${waypoints.finish.name} (${officialFinish[0].toFixed(4)}°N,${officialFinish[1].toFixed(4)}°E)`);
+    console.log(`🧭 Route:    ${routeStart[0].toFixed(4)}°N,${routeStart[1].toFixed(4)}°E → ${routeEnd[0].toFixed(4)}°N,${routeEnd[1].toFixed(4)}°E`);
+    
+    // Calculate distances to determine if route is in correct direction
+    const distanceStartToStart = this.calculateGPSDistance(routeStart, officialStart);
+    const distanceEndToFinish = this.calculateGPSDistance(routeEnd, officialFinish);
+    const distanceStartToFinish = this.calculateGPSDistance(routeStart, officialFinish);
+    const distanceEndToStart = this.calculateGPSDistance(routeEnd, officialStart);
+    
+    const forwardScore = distanceStartToStart + distanceEndToFinish;
+    const backwardScore = distanceStartToFinish + distanceEndToStart;
+    
+    console.log(`🧭 Direction check: Forward=${forwardScore.toFixed(2)}km, Backward=${backwardScore.toFixed(2)}km`);
+    
+    if (backwardScore < forwardScore) {
+      console.log('🔄 Route appears to be backwards, reversing...');
+      const reversed = coordinates.slice().reverse();
+      
+      const newRouteStart = this.convertWebMercatorToWGS84([reversed[0]])[0];
+      const newRouteEnd = this.convertWebMercatorToWGS84([reversed[reversed.length - 1]])[0];
+      console.log(`🧭 Reversed: ${newRouteStart[0].toFixed(4)}°N,${newRouteStart[1].toFixed(4)}°E → ${newRouteEnd[0].toFixed(4)}°N,${newRouteEnd[1].toFixed(4)}°E`);
+      
+      return reversed;
+    } else {
+      console.log('✅ Route direction appears correct');
+      return coordinates;
+    }
   }
 
   createGPX(coordinates, stageName, properties) {
