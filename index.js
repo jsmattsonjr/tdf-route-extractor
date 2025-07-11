@@ -297,7 +297,7 @@ class TDFRouteExtractor {
     console.log(`📏 Final route: ${coordinates.length} coordinates in WGS84 format`);
 
     // Eliminate rolling start if necessary
-    coordinates = this.eliminateRollingStart(coordinates, waypoints);
+    coordinates = this.eliminateRollingStart(coordinates, waypoints, options);
 
     // Sanity check: verify route starts and ends near official waypoints
     this.validateRouteEndpoints(coordinates, waypoints, stageName);
@@ -554,7 +554,12 @@ class TDFRouteExtractor {
     }
   }
 
-  eliminateRollingStart(coordinates, waypoints) {
+  eliminateRollingStart(coordinates, waypoints, options = {}) {
+    if (options.keepRollingStart) {
+      console.log('🏁 Keeping rolling start (--keep-rolling-start option enabled)');
+      return coordinates;
+    }
+
     if (!waypoints || !waypoints.start) {
       console.log('⚠️  No start waypoint available for rolling start elimination');
       return coordinates;
@@ -855,13 +860,15 @@ USAGE:
   node index.js --list             List available stages
 
 OPTIONS:
-  --output, -o <path>     Output directory (default: current directory)
-  --help, -h              Show this help message
+  --output, -o <path>       Output directory (default: current directory)
+  --keep-rolling-start      Skip rolling start elimination (preserve original route start)
+  --help, -h                Show this help message
 
 EXAMPLES:
-  node index.js 6                  Extract Stage 6
-  node index.js 4 --output ./gpx   Extract Stage 4 to ./gpx/
-  node index.js --all -o ./routes  Extract all stages to ./routes/
+  node index.js 6                        Extract Stage 6
+  node index.js 4 --output ./gpx         Extract Stage 4 to ./gpx/
+  node index.js --all -o ./routes        Extract all stages to ./routes/
+  node index.js 2 --keep-rolling-start   Extract Stage 2 without rolling start removal
     `);
     return;
   }
@@ -873,6 +880,11 @@ EXAMPLES:
   const outputIndex = args.findIndex(arg => arg === '--output' || arg === '-o');
   if (outputIndex !== -1 && args[outputIndex + 1]) {
     options.output = args[outputIndex + 1];
+  }
+
+  // Parse keep rolling start option
+  if (args.includes('--keep-rolling-start')) {
+    options.keepRollingStart = true;
   }
 
   try {
