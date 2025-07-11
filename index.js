@@ -296,6 +296,9 @@ class TDFRouteExtractor {
 
     console.log(`📏 Final route: ${coordinates.length} coordinates in WGS84 format`);
 
+    // Eliminate rolling start if necessary
+    coordinates = this.eliminateRollingStart(coordinates, waypoints);
+
     // Sanity check: verify route starts and ends near official waypoints
     this.validateRouteEndpoints(coordinates, waypoints, stageName);
 
@@ -483,6 +486,55 @@ class TDFRouteExtractor {
       console.log('✅ Route direction appears correct (end closer to finish)');
       return coordinates;
     }
+  }
+
+  eliminateRollingStart(coordinates, waypoints) {
+    if (!waypoints || !waypoints.start) {
+      console.log('⚠️  No start waypoint available for rolling start elimination');
+      return coordinates;
+    }
+
+    const officialStart = [waypoints.start.coordinates[0], waypoints.start.coordinates[1]]; // [lon, lat]
+    const officialStartLatLon = [officialStart[1], officialStart[0]]; // [lat, lon]
+
+    // Check if current start is within 3 meters of official start
+    const routeStart = coordinates[0]; // [lon, lat]
+    const routeStartLatLon = [routeStart[1], routeStart[0]]; // [lat, lon]
+    const startDistance = this.calculateGPSDistance(routeStartLatLon, officialStartLatLon);
+
+    if (startDistance <= 0.003) { // 3 meters in km
+      console.log(`✅ Route start is already within 3m of official start (${(startDistance * 1000).toFixed(0)}m)`);
+      return coordinates;
+    }
+
+    console.log(`🔍 Rolling start detected: route start is ${(startDistance * 1000).toFixed(0)}m from official start`);
+    console.log(`🔍 Looking for trackpoint within 3m of official start waypoint...`);
+
+    // Find the first trackpoint within 3 meters of the official start
+    let trueStartIndex = -1;
+    for (let i = 0; i < coordinates.length; i++) {
+      const trackPoint = coordinates[i]; // [lon, lat]
+      const trackPointLatLon = [trackPoint[1], trackPoint[0]]; // [lat, lon]
+      const distance = this.calculateGPSDistance(trackPointLatLon, officialStartLatLon);
+
+      if (distance <= 0.003) { // 3 meters in km
+        trueStartIndex = i;
+        console.log(`✅ Found trackpoint within 3m of official start at index ${i} (${(distance * 1000).toFixed(0)}m away)`);
+        break;
+      }
+    }
+
+    if (trueStartIndex === -1) {
+      console.log('⚠️  No trackpoint found within 3m of official start - keeping original route');
+      return coordinates;
+    }
+
+    // Remove all trackpoints before the true start
+    const trimmedCoordinates = coordinates.slice(trueStartIndex);
+    console.log(`✂️  Eliminated rolling start: removed ${trueStartIndex} trackpoints before true start`);
+    console.log(`📏 Route trimmed from ${coordinates.length} to ${trimmedCoordinates.length} trackpoints`);
+
+    return trimmedCoordinates;
   }
 
   validateRouteEndpoints(coordinates, waypoints, stageName) {
