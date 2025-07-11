@@ -34,35 +34,19 @@ class TDFRouteExtractor {
   async extractStage(stageNumber, options = {}) {
     console.log(`🚴‍♂️ Extracting Tour de France 2025 Stage ${stageNumber}...`);
 
-    const params = {
-      ...this.defaultParams,
-      where: stageNumber ? `Etape=${stageNumber}` : '1=1',
-      geometry: JSON.stringify({
-        "xmin": -560000,
-        "ymin": 5100000,
-        "xmax": 1050000,
-        "ymax": 6700000,
-        "spatialReference": { "wkid": 102100 }
-      }),
-      quantizationParameters: JSON.stringify({
-        "mode": "view",
-        "originPosition": "upperLeft",
-        "tolerance": 0.07464553541191635,
-        "extent": {
-          "xmin": -3.0149499989999526,
-          "ymin": 42.74294000000003,
-          "xmax": 6.7878200000000675,
-          "ymax": 51.03431000000006,
-          "spatialReference": { "wkid": 4326, "latestWkid": 4326, "vcsWkid": 5773, "latestVcsWkid": 5773 }
-        }
-      })
-    };
+    // Try Layer 2 first (contains most stages)
+    let geoJsonData = await this.tryLayer2(stageNumber);
+    let layer = "Layer 2";
 
-    const url = this.buildUrl(params);
-    const geoJsonData = await this.fetchGeoJSON(url);
+    // If no data in Layer 2, try Layer 1 (contains stages 5 and 13)
+    if (!geoJsonData.features || geoJsonData.features.length === 0) {
+      console.log(`🔄 No data in Layer 2, trying Layer 1...`);
+      geoJsonData = await this.tryLayer1(stageNumber);
+      layer = "Layer 1 (Polylines_MergeCLM)";
+    }
 
     if (!geoJsonData.features) {
-      throw new Error('No features in response');
+      throw new Error('No features in response from either layer');
     }
 
     // Filter by stage if we got all stages
@@ -72,19 +56,63 @@ class TDFRouteExtractor {
     }
 
     if (features.length === 0) {
-      throw new Error(`No features found for stage ${stageNumber}`);
+      throw new Error(`No features found for stage ${stageNumber} in either layer`);
     }
 
-    console.log(`✅ Found ${features.length} feature(s)`);
+    console.log(`✅ Found ${features.length} feature(s) in ${layer}`);
 
     // Process the features
     const results = [];
     for (const feature of features) {
-      const result = await this.processFeature(feature, options);
+      const result = await this.processFeature(feature, options, layer);
       results.push(result);
     }
 
     return results;
+  }
+
+  async tryLayer2(stageNumber) {
+    try {
+      const params = {
+        ...this.defaultParams,
+        where: stageNumber ? `Etape=${stageNumber}` : '1=1',
+        geometry: JSON.stringify({
+          "xmin": -560000,
+          "ymin": 5100000,
+          "xmax": 1050000,
+          "ymax": 6700000,
+          "spatialReference": { "wkid": 102100 }
+        }),
+        quantizationParameters: JSON.stringify({
+          "mode": "view",
+          "originPosition": "upperLeft",
+          "tolerance": 0.07464553541191635,
+          "extent": {
+            "xmin": -3.0149499989999526,
+            "ymin": 42.74294000000003,
+            "xmax": 6.7878200000000675,
+            "ymax": 51.03431000000006,
+            "spatialReference": { "wkid": 4326, "latestWkid": 4326, "vcsWkid": 5773, "latestVcsWkid": 5773 }
+          }
+        })
+      };
+
+      const url = this.buildUrl(params);
+      return await this.fetchGeoJSON(url);
+    } catch (error) {
+      console.log(`⚠️  Layer 2 error: ${error.message}`);
+      return { features: [] };
+    }
+  }
+
+  async tryLayer1(stageNumber) {
+    try {
+      const url = this.buildLayer1Url(stageNumber);
+      return await this.fetchGeoJSON(url);
+    } catch (error) {
+      console.log(`⚠️  Layer 1 error: ${error.message}`);
+      return { features: [] };
+    }
   }
 
   buildUrl(params) {
@@ -101,6 +129,43 @@ class TDFRouteExtractor {
       .join('&');
 
     return `${this.pointsUrl}?${queryString}`;
+  }
+
+  buildLayer1Url(stageNumber) {
+    // Layer 1 (Polylines_MergeCLM) - contains stages 5 and 13
+    const layer1BaseUrl = 'https://services9.arcgis.com/euYKeqX7FwwgASW5/arcgis/rest/services/TDF25/FeatureServer/1/query';
+    
+    const params = {
+      f: 'geojson',
+      where: `Etape=${stageNumber}`,
+      returnGeometry: 'true',
+      spatialRel: 'esriSpatialRelIntersects',
+      maxAllowableOffset: '1.0583354500042332',
+      outFields: '*',
+      maxRecordCountFactor: '2',
+      outSR: '102100', // Request Web Mercator like Layer 2
+      resultOffset: '0',
+      resultRecordCount: '4000',
+      cacheHint: 'true',
+      quantizationParameters: JSON.stringify({
+        "mode": "view",
+        "originPosition": "upperLeft",
+        "tolerance": 1.0583354500042332,
+        "extent": {
+          "xmin": -0.47864999999995916,
+          "ymin": 42.794800000000066,
+          "xmax": 0.4389262820000681,
+          "ymax": 49.268530000000055,
+          "spatialReference": { "wkid": 4326, "latestWkid": 4326, "vcsWkid": 5773, "latestVcsWkid": 5773 }
+        }
+      })
+    };
+
+    const queryString = Object.entries(params)
+      .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+      .join('&');
+
+    return `${layer1BaseUrl}?${queryString}`;
   }
 
   fetchGeoJSON(url) {
@@ -252,12 +317,12 @@ class TDFRouteExtractor {
     }
   }
 
-  async processFeature(feature, options) {
+  async processFeature(feature, options, layer = "Layer 2") {
     const properties = feature.properties || {};
     const stageName = properties.Name || `Stage ${properties.Etape || 'Unknown'}`;
     const stageNumber = properties.Etape || 'Unknown';
 
-    console.log(`📍 Processing: ${stageName}`);
+    console.log(`📍 Processing: ${stageName} (from ${layer})`);
 
     if (!feature.geometry || !feature.geometry.coordinates) {
       throw new Error(`No geometry data found for ${stageName}`);
@@ -815,28 +880,21 @@ class TDFRouteExtractor {
     console.log('🚴‍♂️ Extracting all Tour de France 2025 stages...');
 
     try {
-      // Get all stages (no stage filter)
-      const params = { ...this.defaultParams, where: '1=1' };
-      const url = this.buildUrl(params);
-
-      const geoJsonData = await this.fetchGeoJSON(url);
-
-      if (!geoJsonData.features || geoJsonData.features.length === 0) {
-        throw new Error('No route data found');
-      }
-
-      console.log(`✅ Found ${geoJsonData.features.length} total stages`);
-
+      // Extract each stage individually to use hybrid approach
       const results = [];
-      for (const feature of geoJsonData.features) {
+      
+      // Try all stages 1-21
+      for (let stageNumber = 1; stageNumber <= 21; stageNumber++) {
         try {
-          const result = await this.processFeature(feature, options);
-          results.push(result);
+          const stageResults = await this.extractStage(stageNumber, options);
+          results.push(...stageResults);
         } catch (error) {
-          console.error(`❌ Error processing stage: ${error.message}`);
+          console.error(`❌ Error processing stage ${stageNumber}: ${error.message}`);
+          // Continue with other stages even if one fails
         }
       }
 
+      console.log(`🎉 Successfully extracted ${results.length} stages using hybrid layer approach`);
       return results;
 
     } catch (error) {
