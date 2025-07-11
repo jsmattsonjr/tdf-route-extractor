@@ -360,6 +360,72 @@ class TDFRouteExtractor {
     return (R * c) / 1000; // Distance in kilometers
   }
 
+  projectPointToLineSegment(point, lineStart, lineEnd) {
+    // Project a point onto a line segment defined by two points
+    // All coordinates should be in [lon, lat] format
+    const [px, py] = point;
+    const [x1, y1] = lineStart;
+    const [x2, y2] = lineEnd;
+
+    // Vector from line start to line end
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+
+    // Vector from line start to point
+    const dpx = px - x1;
+    const dpy = py - y1;
+
+    // Calculate the parameter t for the projection
+    const lengthSquared = dx * dx + dy * dy;
+    
+    if (lengthSquared === 0) {
+      // Line segment is a point, return the start point
+      return { point: [x1, y1], t: 0 };
+    }
+
+    const t = (dpx * dx + dpy * dy) / lengthSquared;
+
+    // Clamp t to [0, 1] to stay within the line segment
+    const clampedT = Math.max(0, Math.min(1, t));
+
+    // Calculate the projected point
+    const projectedX = x1 + clampedT * dx;
+    const projectedY = y1 + clampedT * dy;
+
+    return { point: [projectedX, projectedY], t: clampedT };
+  }
+
+  projectPointToLineString(point, lineString) {
+    // Project a point onto a linestring, finding the closest point on any segment
+    let closestProjection = null;
+    let closestDistance = Infinity;
+    let closestSegmentIndex = -1;
+
+    const pointLatLon = [point[1], point[0]]; // Convert to [lat, lon] for distance calculation
+
+    for (let i = 0; i < lineString.length - 1; i++) {
+      const segmentStart = lineString[i];
+      const segmentEnd = lineString[i + 1];
+
+      const projection = this.projectPointToLineSegment(point, segmentStart, segmentEnd);
+      const projectionLatLon = [projection.point[1], projection.point[0]];
+      const distance = this.calculateGPSDistance(pointLatLon, projectionLatLon);
+
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestProjection = projection;
+        closestSegmentIndex = i;
+      }
+    }
+
+    return {
+      point: closestProjection.point,
+      distance: closestDistance,
+      segmentIndex: closestSegmentIndex,
+      t: closestProjection.t
+    };
+  }
+
   findConnectableLineStrings(lineStrings, maxDistance = 10) {
     const connectable = [];
     const significant = lineStrings.filter(ls => ls.length > 100).sort((a, b) => b.length - a.length);
@@ -525,8 +591,30 @@ class TDFRouteExtractor {
     }
 
     if (trueStartIndex === -1) {
-      console.log('⚠️  No trackpoint found within 3m of official start - keeping original route');
-      return coordinates;
+      console.log('⚠️  No trackpoint found within 3m of official start');
+      console.log('🎯 Attempting to project start waypoint onto route...');
+      
+      // Project the start waypoint onto the route linestring
+      const projection = this.projectPointToLineString(officialStart, coordinates);
+      
+      console.log(`🎯 Projected start waypoint onto route: ${(projection.distance * 1000).toFixed(1)}m from route`);
+      console.log(`🎯 Projection at segment ${projection.segmentIndex}, t=${projection.t.toFixed(3)}`);
+      
+      // Calculate the insertion index based on the segment and parameter t
+      const insertionIndex = projection.segmentIndex + Math.round(projection.t);
+      
+      console.log(`🎯 Inserting projected start at index ${insertionIndex}`);
+      
+      // Insert the projected point at the calculated index
+      const modifiedCoordinates = [...coordinates];
+      modifiedCoordinates.splice(insertionIndex, 0, projection.point);
+      
+      // Remove all trackpoints before the projected start
+      const trimmedCoordinates = modifiedCoordinates.slice(insertionIndex);
+      console.log(`✂️  Eliminated rolling start: removed ${insertionIndex} trackpoints before projected start`);
+      console.log(`📏 Route trimmed from ${coordinates.length} to ${trimmedCoordinates.length} trackpoints (including projected start)`);
+      
+      return trimmedCoordinates;
     }
 
     // Remove all trackpoints before the true start
